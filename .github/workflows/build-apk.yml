@@ -23,6 +23,9 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
       - name: Create Android project
         run: |
           mkdir -p app/src/main/java/com/capybara/toolkit
@@ -68,8 +71,8 @@ jobs:
                   applicationId 'com.capybara.toolkit'
                   minSdk 26
                   targetSdk 28
-                  versionCode 1
-                  versionName '1.0'
+                  versionCode 2
+                  versionName '2.1-film'
               }
           }
           EOF
@@ -109,6 +112,8 @@ jobs:
                   <item name="android:fontFamily">monospace</item>
                   <item name="android:colorAccent">#00FF88</item>
                   <item name="android:windowBackground">#050A08</item>
+                  <item name="android:statusBarColor">#050A08</item>
+                  <item name="android:navigationBarColor">#050A08</item>
               </style>
           </resources>
           EOF
@@ -139,13 +144,15 @@ jobs:
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
                   root.setPadding(40, 80, 40, 40);
-                  root.setBackgroundColor(Color.rgb(5,10,8));
+                  root.setBackgroundColor(Color.rgb(5, 10, 8));
 
                   TextView title = new TextView(this);
-                  title.setText("CAPYBARA TOOLKIT\nFILM PROP // VISUAL SIMULATION");
-                  title.setTextColor(Color.rgb(0,255,136));
+                  title.setText(
+                      "CAPYBARA TOOLKIT\nFILM PROP // VISUAL SIMULATION"
+                  );
+                  title.setTextColor(Color.rgb(0, 255, 136));
                   title.setTextSize(20);
-                  title.setPadding(10,10,10,30);
+                  title.setPadding(10, 10, 10, 30);
 
                   Button permission = new Button(this);
                   permission.setText("AUTHORIZE OVERLAY");
@@ -172,8 +179,13 @@ jobs:
                   });
 
                   start.setOnClickListener(v -> {
-                      if (Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this)) {
-                          startService(new Intent(this, OverlayService.class));
+                      if (
+                          Build.VERSION.SDK_INT < 23 ||
+                          Settings.canDrawOverlays(this)
+                      ) {
+                          startService(
+                              new Intent(this, OverlayService.class)
+                          );
                       } else {
                           Toast.makeText(
                               this,
@@ -184,7 +196,9 @@ jobs:
                   });
 
                   stop.setOnClickListener(v ->
-                      stopService(new Intent(this, OverlayService.class))
+                      stopService(
+                          new Intent(this, OverlayService.class)
+                      )
                   );
 
                   setContentView(root);
@@ -205,6 +219,8 @@ jobs:
           import android.os.Build;
           import android.os.IBinder;
           import android.view.Gravity;
+          import android.view.MotionEvent;
+          import android.view.View;
           import android.view.WindowManager;
           import android.widget.Button;
           import android.widget.LinearLayout;
@@ -213,140 +229,396 @@ jobs:
           public class OverlayService extends Service {
 
               private WindowManager wm;
+
+              private TextView bubble;
               private LinearLayout panel;
               private TextView status;
               private TextView log;
 
+              private WindowManager.LayoutParams bubbleParams;
+
               private TextView label(String value) {
                   TextView t = new TextView(this);
                   t.setText(value);
-                  t.setTextColor(Color.rgb(0,255,136));
+                  t.setTextColor(Color.rgb(0, 255, 136));
                   t.setTextSize(13);
-                  t.setPadding(12,8,12,8);
+                  t.setPadding(14, 10, 14, 10);
                   return t;
               }
 
-              private void addButton(String name, String message) {
-                  Button b = new Button(this);
-                  b.setText(name);
+              private GradientDrawable background(
+                      int color,
+                      int stroke,
+                      float radius
+              ) {
+                  GradientDrawable bg = new GradientDrawable();
+                  bg.setColor(color);
+                  bg.setStroke(2, stroke);
+                  bg.setCornerRadius(radius);
+                  return bg;
+              }
 
-                  b.setOnClickListener(v -> {
-                      log.setText("> " + message + "\n" + log.getText());
+              private void addButton(
+                      String title,
+                      String message
+              ) {
+                  Button button = new Button(this);
+                  button.setText(title);
+
+                  button.setOnClickListener(v -> {
+                      log.setText(
+                          "> " + message + "\n" + log.getText()
+                      );
                   });
 
-                  panel.addView(b);
+                  panel.addView(button);
               }
 
               @Override
               public void onCreate() {
                   super.onCreate();
 
-                  wm = (WindowManager)getSystemService(WINDOW_SERVICE);
+                  wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+
+                  int type =
+                          Build.VERSION.SDK_INT >= 26
+                                  ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                                  : WindowManager.LayoutParams.TYPE_PHONE;
+
+                  createPanel(type);
+                  createBubble(type);
+              }
+
+              private void createBubble(int type) {
+
+                  bubble = new TextView(this);
+
+                  bubble.setText("C");
+                  bubble.setTextColor(Color.BLACK);
+                  bubble.setTextSize(24);
+                  bubble.setGravity(Gravity.CENTER);
+
+                  bubble.setBackground(
+                          background(
+                                  Color.rgb(0, 255, 136),
+                                  Color.rgb(0, 255, 136),
+                                  100
+                          )
+                  );
+
+                  bubbleParams =
+                          new WindowManager.LayoutParams(
+                                  120,
+                                  120,
+                                  type,
+                                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                                  PixelFormat.TRANSLUCENT
+                          );
+
+                  bubbleParams.gravity =
+                          Gravity.TOP | Gravity.START;
+
+                  bubbleParams.x = 30;
+                  bubbleParams.y = 250;
+
+                  wm.addView(
+                          bubble,
+                          bubbleParams
+                  );
+
+                  bubble.setOnClickListener(v -> {
+
+                      if (panel.getVisibility() == View.VISIBLE) {
+                          panel.setVisibility(View.GONE);
+                      } else {
+                          panel.setVisibility(View.VISIBLE);
+                      }
+                  });
+
+                  bubble.setOnTouchListener(
+                          new View.OnTouchListener() {
+
+                              int initialX;
+                              int initialY;
+
+                              float initialTouchX;
+                              float initialTouchY;
+
+                              long downTime;
+                              boolean moved;
+
+                              @Override
+                              public boolean onTouch(
+                                      View view,
+                                      MotionEvent event
+                              ) {
+
+                                  switch (event.getAction()) {
+
+                                      case MotionEvent.ACTION_DOWN:
+
+                                          downTime =
+                                                  System.currentTimeMillis();
+
+                                          moved = false;
+
+                                          initialX =
+                                                  bubbleParams.x;
+
+                                          initialY =
+                                                  bubbleParams.y;
+
+                                          initialTouchX =
+                                                  event.getRawX();
+
+                                          initialTouchY =
+                                                  event.getRawY();
+
+                                          return true;
+
+                                      case MotionEvent.ACTION_MOVE:
+
+                                          float dx =
+                                                  event.getRawX()
+                                                          - initialTouchX;
+
+                                          float dy =
+                                                  event.getRawY()
+                                                          - initialTouchY;
+
+                                          if (
+                                              Math.abs(dx) > 8 ||
+                                              Math.abs(dy) > 8
+                                          ) {
+                                              moved = true;
+                                          }
+
+                                          bubbleParams.x =
+                                                  initialX
+                                                          + (int) dx;
+
+                                          bubbleParams.y =
+                                                  initialY
+                                                          + (int) dy;
+
+                                          wm.updateViewLayout(
+                                                  bubble,
+                                                  bubbleParams
+                                          );
+
+                                          return true;
+
+                                      case MotionEvent.ACTION_UP:
+
+                                          long duration =
+                                                  System.currentTimeMillis()
+                                                          - downTime;
+
+                                          if (
+                                              !moved &&
+                                              duration < 300
+                                          ) {
+                                              bubble.performClick();
+                                          }
+
+                                          return true;
+                                  }
+
+                                  return false;
+                              }
+                          }
+                  );
+              }
+
+              private void createPanel(int type) {
 
                   panel = new LinearLayout(this);
-                  panel.setOrientation(LinearLayout.VERTICAL);
-                  panel.setPadding(20,20,20,20);
 
-                  GradientDrawable bg = new GradientDrawable();
-                  bg.setColor(Color.rgb(5,12,10));
-                  bg.setStroke(2, Color.rgb(0,255,136));
-                  bg.setCornerRadius(20);
-                  panel.setBackground(bg);
+                  panel.setOrientation(
+                          LinearLayout.VERTICAL
+                  );
 
-                  panel.addView(label("CAPYBARA TOOLKIT // v2.0"));
-                  panel.addView(label("TARGET: CAPYBARA GO"));
-                  panel.addView(label("LINK: READY"));
+                  panel.setPadding(
+                          20,
+                          20,
+                          20,
+                          20
+                  );
 
-                  status = label("STATUS: STANDBY");
-                  log = label("> awaiting command...");
+                  panel.setBackground(
+                          background(
+                                  Color.rgb(5, 12, 10),
+                                  Color.rgb(0, 255, 136),
+                                  20
+                          )
+                  );
+
+                  panel.addView(
+                          label(
+                                  "CAPYBARA TOOLKIT // v2.1"
+                          )
+                  );
+
+                  panel.addView(
+                          label(
+                                  "TARGET: CAPYBARA GO"
+                          )
+                  );
+
+                  panel.addView(
+                          label(
+                                  "LINK: READY"
+                          )
+                  );
+
+                  status =
+                          label(
+                                  "STATUS: STANDBY"
+                          );
 
                   panel.addView(status);
+
+                  log =
+                          label(
+                                  "> awaiting command..."
+                          );
+
                   panel.addView(log);
 
                   addButton(
-                      "ATTACH // SIMULATE",
-                      "[link] visual simulation attached"
+                          "ATTACH // SIMULATE",
+                          "[link] visual simulation attached"
                   );
 
                   addButton(
-                      "COINS +999K",
-                      "[wallet] visual coin effect staged"
+                          "COINS +999K",
+                          "[wallet] visual coin effect staged"
                   );
 
                   addButton(
-                      "GEMS +99K",
-                      "[wallet] visual gem effect staged"
+                          "GEMS +99K",
+                          "[wallet] visual gem effect staged"
                   );
 
                   addButton(
-                      "DAMAGE x99",
-                      "[combat] visual multiplier staged"
+                          "DAMAGE x99",
+                          "[combat] visual multiplier staged"
                   );
 
                   addButton(
-                      "SPEED x4",
-                      "[engine] visual speed flag staged"
+                          "SPEED x4",
+                          "[engine] visual speed staged"
                   );
 
                   addButton(
-                      "GOD MODE",
-                      "[combat] visual protection staged"
+                          "GOD MODE",
+                          "[combat] visual protection staged"
                   );
 
-                  Button detection = new Button(this);
-                  detection.setText("TRIGGER DETECTION");
+                  Button detection =
+                          new Button(this);
+
+                  detection.setText(
+                          "TRIGGER DETECTION"
+                  );
 
                   detection.setOnClickListener(v -> {
+
                       status.setText(
-                          "STATUS: ANOMALOUS ACTIVITY DETECTED"
+                              "STATUS: ANOMALOUS ACTIVITY DETECTED"
                       );
+
                       log.setText(
-                          "> [security] simulated detection\n" +
-                          log.getText()
+                              "> [security] simulated detection triggered\n"
+                                      + log.getText()
                       );
                   });
 
                   panel.addView(detection);
 
-                  Button close = new Button(this);
-                  close.setText("CLOSE");
+                  Button reset =
+                          new Button(this);
 
-                  close.setOnClickListener(v -> stopSelf());
+                  reset.setText(
+                          "RESET SCENE"
+                  );
+
+                  reset.setOnClickListener(v -> {
+
+                      status.setText(
+                              "STATUS: STANDBY"
+                      );
+
+                      log.setText(
+                              "> awaiting command..."
+                      );
+                  });
+
+                  panel.addView(reset);
+
+                  Button close =
+                          new Button(this);
+
+                  close.setText(
+                          "CLOSE"
+                  );
+
+                  close.setOnClickListener(v ->
+                          panel.setVisibility(
+                                  View.GONE
+                          )
+                  );
 
                   panel.addView(close);
 
-                  int type =
-                      Build.VERSION.SDK_INT >= 26
-                          ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                          : WindowManager.LayoutParams.TYPE_PHONE;
+                  WindowManager.LayoutParams panelParams =
+                          new WindowManager.LayoutParams(
+                                  700,
+                                  WindowManager.LayoutParams.WRAP_CONTENT,
+                                  type,
+                                  WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                                  PixelFormat.TRANSLUCENT
+                          );
 
-                  WindowManager.LayoutParams params =
-                      new WindowManager.LayoutParams(
-                          700,
-                          WindowManager.LayoutParams.WRAP_CONTENT,
-                          type,
-                          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                          PixelFormat.TRANSLUCENT
-                      );
+                  panelParams.gravity =
+                          Gravity.TOP | Gravity.START;
 
-                  params.gravity = Gravity.TOP | Gravity.START;
-                  params.x = 30;
-                  params.y = 150;
+                  panelParams.x = 170;
+                  panelParams.y = 180;
 
-                  wm.addView(panel, params);
+                  wm.addView(
+                          panel,
+                          panelParams
+                  );
+
+                  panel.setVisibility(
+                          View.GONE
+                  );
               }
 
               @Override
               public void onDestroy() {
                   super.onDestroy();
 
+                  if (bubble != null) {
+                      try {
+                          wm.removeView(bubble);
+                      } catch (Exception ignored) {
+                      }
+                  }
+
                   if (panel != null) {
-                      wm.removeView(panel);
+                      try {
+                          wm.removeView(panel);
+                      } catch (Exception ignored) {
+                      }
                   }
               }
 
               @Override
-              public IBinder onBind(Intent intent) {
+              public IBinder onBind(
+                      Intent intent
+              ) {
                   return null;
               }
           }
@@ -357,7 +629,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Show Gradle projects
+      - name: Show projects
         run: gradle projects
 
       - name: Build APK
